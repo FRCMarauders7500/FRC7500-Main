@@ -13,6 +13,7 @@
 
 package frc.robot;
 
+import edu.wpi.first.net.PortForwarder;
 import edu.wpi.first.wpilibj.PowerDistribution;
 import edu.wpi.first.wpilibj.PowerDistribution.ModuleType;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -40,6 +41,10 @@ public class Robot extends LoggedRobot {
    */
   @Override
   public void robotInit() {
+
+    for (int port = 5800; port <= 5807; port++) {
+      PortForwarder.add(port, "limelight.local", port);
+    }
 
     Logger.recordMetadata("ProjectName", "MyProject"); // Set a metadata value
 

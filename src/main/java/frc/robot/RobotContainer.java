@@ -14,22 +14,28 @@
 package frc.robot;
 
 import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.auto.NamedCommands;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.Command.InterruptionBehavior;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
+import edu.wpi.first.wpilibj2.command.ParallelCommandGroup;
 import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;
+import edu.wpi.first.wpilibj2.command.WaitCommand;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.commands.DriveCommands;
+import frc.robot.commands.ManualLift;
 import frc.robot.commands.ManualWrist;
 import frc.robot.commands.WristToAngle;
 import frc.robot.subsystems.Intake;
+import frc.robot.subsystems.Lift;
 import frc.robot.subsystems.Shooter;
 import frc.robot.subsystems.Wrist;
 import frc.robot.subsystems.drive.Drive;
@@ -52,15 +58,15 @@ public class RobotContainer {
   private final Intake intake;
   private final Wrist wrist;
   private final Shooter shooter;
+  private final Lift lift;
 
-  private Trigger suckTrig, spitTrig, ejectTrig;
-  private Trigger shootTrig;
-  private Trigger wristTrig;
-  private RunCommand suck, spit, eject;
-  private RunCommand shoot;
+  private Trigger intakeTrig, scoreTrig; // Take out last trigger later
+  private InstantCommand suck, spit;
+  private InstantCommand shoot;
   private InstantCommand shootStop;
-  private InstantCommand intakeStop;
-  private Command manualWrist, wristToAngle1;
+  private InstantCommand intakeStop1, intakeStop2;
+  private Command manualWrist, wristIntake, wristScore;
+  private Command manualLift;
 
   // Controller
   private final CommandXboxController dController, mController;
@@ -73,20 +79,32 @@ public class RobotContainer {
     dController = new CommandXboxController(0);
     mController = new CommandXboxController(1);
 
+    lift = new Lift();
+    lift.register();
     wrist = new Wrist();
     wrist.register();
     intake = new Intake();
     intake.register();
     shooter = new Shooter();
     shooter.register();
-    suck = new RunCommand(() -> intake.setPower(-.6), intake);
-    spit = new RunCommand(() -> intake.setPower(-1), intake);
-    eject = new RunCommand(() -> intake.setPower(1), intake);
-    shoot = new RunCommand(shooter::shoot, shooter);
-    intakeStop = new InstantCommand(intake::stop);
+
+    NamedCommands.registerCommand("spit", new RunCommand(() -> intake.setPower(-1), intake));
+    NamedCommands.registerCommand(
+        "shoot",
+        new RunCommand(shooter::shoot, shooter)
+            .withTimeout(3)
+            .andThen(new InstantCommand(shooter::stop)));
+
+    suck = new InstantCommand(() -> intake.setPower(-.8), intake);
+    spit = new InstantCommand(() -> intake.setPower(-1), intake);
+    shoot = new InstantCommand(shooter::shoot, shooter);
+    intakeStop1 = new InstantCommand(intake::stop);
+    intakeStop2 = new InstantCommand(intake::stop);
     shootStop = new InstantCommand(shooter::stop);
     manualWrist = new ManualWrist(wrist, mController::getLeftY);
-    wristToAngle1 = new WristToAngle(wrist, -270);
+    wristIntake = new WristToAngle(wrist, -152);
+    wristScore = new WristToAngle(wrist, -20);
+    manualLift = new ManualLift(lift, mController::getRightY);
 
     switch (Constants.currentMode) {
       case REAL:
@@ -152,12 +170,17 @@ public class RobotContainer {
     // Configure the button bindings
     configureButtonBindings();
 
-    spitTrig
-        .whileTrue(new SequentialCommandGroup(eject.withTimeout(.05), spit))
-        .whileFalse(intakeStop);
-    suckTrig.whileTrue(suck).whileFalse(intakeStop);
-    shootTrig.whileTrue(shoot).whileFalse(shootStop);
-    wristTrig.whileTrue(wristToAngle1);
+    intakeTrig
+        .whileTrue(
+            new ParallelCommandGroup(
+                wristIntake.withInterruptBehavior(InterruptionBehavior.kCancelSelf), suck))
+        .onFalse(
+            new ParallelCommandGroup(
+                wristScore.withInterruptBehavior(InterruptionBehavior.kCancelSelf), intakeStop2));
+    scoreTrig
+        .whileTrue(
+            new ParallelCommandGroup(shoot, new SequentialCommandGroup(new WaitCommand(3), spit)))
+        .onFalse(new ParallelCommandGroup(shootStop, intakeStop1));
   }
 
   /**
@@ -168,27 +191,37 @@ public class RobotContainer {
    */
   private void configureButtonBindings() {
 
-    spitTrig = mController.x();
-    suckTrig = mController.b();
-    shootTrig = mController.y();
-    wristTrig = mController.a();
+    intakeTrig = mController.x();
+    scoreTrig = mController.b();
 
     wrist.setDefaultCommand(manualWrist);
+    lift.setDefaultCommand(manualLift);
 
     drive.setDefaultCommand(
         DriveCommands.joystickDrive(
             drive,
-            () -> -dController.getLeftY(),
-            () -> -dController.getLeftX(),
+            () -> dController.getLeftY(),
+            () -> dController.getLeftX(),
             () -> dController.getRightX()));
     dController.x().onTrue(Commands.runOnce(drive::stopWithX, drive));
     dController
-        .b()
+        .rightBumper()
         .onTrue(
             Commands.runOnce(
                     () ->
                         drive.setPose(
                             new Pose2d(drive.getPose().getTranslation(), new Rotation2d())),
+                    drive)
+                .ignoringDisable(true));
+    dController
+        .leftBumper()
+        .onTrue(
+            Commands.runOnce(
+                    () ->
+                        drive.setPose(
+                            new Pose2d(
+                                drive.getPose().getTranslation(),
+                                new Rotation2d(Math.toRadians(180)))),
                     drive)
                 .ignoringDisable(true));
   }

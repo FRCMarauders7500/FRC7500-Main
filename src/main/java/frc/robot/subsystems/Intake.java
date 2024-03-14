@@ -9,7 +9,7 @@ public class Intake extends SubsystemBase {
   private final CANSparkMax spin = new CANSparkMax(9, MotorType.kBrushless);
 
   public Intake() {
-    spin.setIdleMode(IdleMode.kBrake);
+    spin.setIdleMode(IdleMode.kCoast);
   }
   ;
 

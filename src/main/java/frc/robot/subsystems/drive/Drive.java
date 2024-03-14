@@ -30,9 +30,14 @@ import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.util.LocalADStarAK;
@@ -55,6 +60,10 @@ public class Drive extends SubsystemBase {
   private final GyroIOInputsAutoLogged gyroInputs = new GyroIOInputsAutoLogged();
   private final Module[] modules = new Module[4]; // FL, FR, BL, BR
   private final SysIdRoutine sysId;
+  NetworkTable table = NetworkTableInstance.getDefault().getTable("limelight");
+  NetworkTableEntry tx = table.getEntry("tx");
+  NetworkTableEntry ty = table.getEntry("ty");
+  NetworkTableEntry ta = table.getEntry("ta");
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = new Rotation2d();
@@ -126,6 +135,9 @@ public class Drive extends SubsystemBase {
   }
 
   public void periodic() {
+
+    SmartDashboard.putData("Scheduler", CommandScheduler.getInstance());
+    SmartDashboard.putNumber("yaw", getPose().getRotation().getDegrees());
 
     odometryLock.lock(); // Prevents odometry updates while reading data
     gyroIO.updateInputs(gyroInputs);
@@ -211,6 +223,31 @@ public class Drive extends SubsystemBase {
     runVelocity(new ChassisSpeeds());
   }
 
+  public double limelightRangeProportional() {
+    double kP = .1;
+    double distance = 4;
+    double targetingForwardSpeed = ty.getDouble(0.0) * kP;
+    targetingForwardSpeed *= MAX_LINEAR_SPEED;
+    targetingForwardSpeed *= -1.0;
+    targetingForwardSpeed -= distance;
+
+    return targetingForwardSpeed;
+  }
+
+  public double limelightAimProportional() {
+    double kP = .035;
+    double targetingAngularVelocity = tx.getDouble(0.0) * kP;
+    targetingAngularVelocity *= MAX_ANGULAR_SPEED;
+    targetingAngularVelocity *= -1.0;
+  
+
+    return targetingAngularVelocity;
+  }
+
+  public double limelightY() {
+    return 0;
+  }
+
   /**
    * Stops the drive and turns the modules to an X arrangement to resist movement. The modules will
    * return to their normal orientations the next time a nonzero velocity is requested.
@@ -262,6 +299,10 @@ public class Drive extends SubsystemBase {
   /** Returns the current odometry rotation. */
   public Rotation2d getRotation() {
     return getPose().getRotation();
+  }
+
+  public void setRotation(Rotation2d angle) {
+    rawGyroRotation = angle;
   }
 
   /** Resets the current odometry pose. */

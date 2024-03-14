@@ -17,7 +17,7 @@ public class ManualWrist extends Command {
 
   @Override
   public void execute() {
-    s_Wrist.set(power.getAsDouble());
+    s_Wrist.set(power.getAsDouble()); // + 0.01
   }
 
   @Override

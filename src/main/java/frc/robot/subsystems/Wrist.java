@@ -24,7 +24,7 @@ public class Wrist extends SubsystemBase {
     wristUp.setIdleMode(IdleMode.kBrake);
     wristDown.setIdleMode(IdleMode.kBrake);
 
-    angleController.setTolerance(2);
+    angleController.setTolerance(3);
   }
 
   public double getAngle() {
@@ -53,6 +53,10 @@ public class Wrist extends SubsystemBase {
 
   public void manualSet(DoubleSupplier pwr) {
     wristUp.set(pwr.getAsDouble() * 0.5);
+  }
+
+  public void stop() {
+    wristUp.set(0);
   }
 
   public void resetEncoder() {

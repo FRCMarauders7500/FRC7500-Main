@@ -10,6 +10,7 @@ public class WristToAngle extends Command {
   public WristToAngle(Wrist s_Wrist, double angle) {
     this.s_Wrist = s_Wrist;
     this.angle = angle;
+    addRequirements(s_Wrist);
   }
 
   @Override
@@ -28,8 +29,8 @@ public class WristToAngle extends Command {
     s_Wrist.set(0);
   }
 
-  @Override
-  public boolean isFinished() {
-    return s_Wrist.controllerAtSetPoint();
-  }
+  // @Override
+  // public boolean isFinished() {
+  //   return s_Wrist.controllerAtSetPoint();
+  // }
 }
